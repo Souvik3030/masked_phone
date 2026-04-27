@@ -24,6 +24,40 @@ function getFirstPhone($fields)
     return isset($fields['PHONE']) && is_array($fields['PHONE']) ? $fields['PHONE'][0]['VALUE'] : '';
 }
 
+function getContactPhone($contactId)
+{
+    if (empty($contactId) || $contactId <= 0) {
+        return '';
+    }
+
+    $contactDataFetch = CRest::call('crm.contact.get', ['id' => $contactId]);
+    $contactFields = $contactDataFetch['result'] ?? [];
+
+    return getFirstPhone($contactFields);
+}
+
+function getDealContactPhone($dealId)
+{
+    $dealContactsFetch = CRest::call('crm.deal.contact.items.get', ['id' => $dealId]);
+    $dealContacts = $dealContactsFetch['result'] ?? [];
+
+    logEvent("FETCHED DEAL CONTACTS", [
+        'Deal_ID' => $dealId,
+        'Contacts' => $dealContacts
+    ]);
+
+    foreach ($dealContacts as $dealContact) {
+        $contactId = $dealContact['CONTACT_ID'] ?? null;
+        $phone = getContactPhone($contactId);
+
+        if (!empty($phone)) {
+            return $phone;
+        }
+    }
+
+    return '';
+}
+
 function maskPhone($rawPhone)
 {
     if (empty($rawPhone)) {
@@ -69,9 +103,13 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
     if (empty($rawPhone) && !empty($contactId) && $contactId > 0) {
         logEvent("FETCHING CONTACT DATA", "$entityTitle is missing phone. Fetching Contact ID: $contactId");
 
-        $contactDataFetch = CRest::call('crm.contact.get', ['id' => $contactId]);
-        $contactFields = $contactDataFetch['result'] ?? [];
-        $rawPhone = getFirstPhone($contactFields);
+        $rawPhone = getContactPhone($contactId);
+    }
+
+    if (empty($rawPhone) && $entityType === 'deal') {
+        logEvent("FETCHING DEAL CONTACTS", "$entityTitle is missing phone. Fetching linked contacts for Deal ID: $entityId");
+
+        $rawPhone = getDealContactPhone($entityId);
     }
 
     $companyId = $entityFields['COMPANY_ID'] ?? null;
