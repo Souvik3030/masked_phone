@@ -620,14 +620,26 @@ function processContactPhoneMask($contactId, $leadPhoneMaskFieldId, $dealPhoneMa
 $eventName = preg_replace('/[^A-Z]/', '', strtoupper(trim($data['event'] ?? '')));
 $entityId = $data['data']['FIELDS']['ID'] ?? null;
 $requestEntityTypeId = $data['data']['FIELDS']['ENTITY_TYPE_ID'] ?? $data['data']['FIELDS']['entityTypeId'] ?? $data['entityTypeId'] ?? null;
+$manualSpaRun = ($data['run_spa_mask'] ?? '') === '1';
+$manualSpaItemId = $data['spa_item_id'] ?? null;
 
 logEvent("STEP 02 ROUTER DEBUG", [
     'normalized_event' => $eventName,
     'entity_id' => $entityId,
-    'entityTypeId' => $requestEntityTypeId
+    'entityTypeId' => $requestEntityTypeId,
+    'manual_spa_run' => $manualSpaRun,
+    'manual_spa_item_id' => $manualSpaItemId
 ]);
 
-if (strpos($eventName, 'CRMLEAD') !== false) {
+if ($manualSpaRun && !empty($manualSpaItemId)) {
+    logEvent("STEP 03 ROUTED TO MANUAL SPA", [
+        'spa_item_id' => $manualSpaItemId,
+        'entityTypeId' => $spaEntityTypeId
+    ]);
+    processSpaPhoneMask($spaEntityTypeId, $manualSpaItemId, $spaPhoneMaskFieldId, 'MANUAL_SPA_MASK_RUN');
+} elseif ($manualSpaRun) {
+    logEvent("MANUAL SPA RUN SKIPPED", "spa_item_id is required.");
+} elseif (strpos($eventName, 'CRMLEAD') !== false) {
     logEvent("STEP 03 ROUTED TO LEAD", [
         'event' => $eventName,
         'entity_id' => $entityId
