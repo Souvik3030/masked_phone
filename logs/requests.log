@@ -1,0 +1,26 @@
+{
+    "timestamp": "2026-04-27 12:39:07",
+    "message": "REQUEST DEBUG",
+    "data": {
+        "method": "",
+        "event": "ONCRMDEALADD",
+        "entity_id": "",
+        "request_keys": [
+            "event",
+            "data"
+        ]
+    }
+}
+{
+    "timestamp": "2026-04-27 12:39:07",
+    "message": "ROUTER DEBUG",
+    "data": {
+        "normalized_event": "ONCRMDEALADD",
+        "entity_id": ""
+    }
+}
+{
+    "timestamp": "2026-04-27 12:39:07",
+    "message": "EVENT RECEIVED",
+    "data": "ONCRMDEALADD detected for DEAL ID "
+}

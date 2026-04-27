@@ -10,13 +10,13 @@ $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
 
 date_default_timezone_set('Asia/Dubai');
 
-$data = $_POST;
+$data = $_REQUEST;
 
 logEvent("REQUEST DEBUG", [
     'method' => $_SERVER['REQUEST_METHOD'] ?? '',
     'event' => $data['event'] ?? '',
     'entity_id' => $data['data']['FIELDS']['ID'] ?? '',
-    'post_keys' => array_keys($data)
+    'request_keys' => array_keys($data)
 ]);
 
 function getFirstPhone($fields)
@@ -155,12 +155,17 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
     logEvent("UPDATE API RESPONSE", $updateResult);
 }
 
-$eventName = strtoupper(trim($data['event'] ?? ''));
+$eventName = preg_replace('/[^A-Z]/', '', strtoupper(trim($data['event'] ?? '')));
 $entityId = $data['data']['FIELDS']['ID'] ?? null;
 
-if ($eventName === 'ONCRMLEADADD' || $eventName === 'ONCRMLEADUPDATE') {
+logEvent("ROUTER DEBUG", [
+    'normalized_event' => $eventName,
+    'entity_id' => $entityId
+]);
+
+if (strpos($eventName, 'CRMLEAD') !== false) {
     processPhoneMask('lead', $entityId, $leadPhoneFieldId, $leadPhoneMaskFieldId, $eventName);
-} elseif ($eventName === 'ONCRMDEALADD' || $eventName === 'ONCRMDEALUPDATE') {
+} elseif (strpos($eventName, 'CRMDEAL') !== false) {
     processPhoneMask('deal', $entityId, $dealPhoneFieldId, $dealPhoneMaskFieldId, $eventName);
 } else {
     // Optional: Log pings that aren't the correct event
