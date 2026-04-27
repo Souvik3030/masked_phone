@@ -158,43 +158,9 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
             'number_value' => $rawPhone
         ]);
 
-        $maskedPhone = maskPhone($rawPhone);
-
-        logEvent("$logPrefix 06 MASKING CALCULATION", [
-            'entity_type' => $entityTitle,
-            'entity_id' => $entityId,
-            'phone_source' => $phoneSource,
-            'original_phone' => $rawPhone,
-            'target_phone' => $maskedPhone
-        ]);
-
-        if (empty($maskedPhone)) {
-            logEvent("$logPrefix 07 UPDATE SKIPPED", "Deal custom number field is empty.");
-            return;
+        if (empty($rawPhone)) {
+            logEvent("$logPrefix 06 CUSTOM NUMBER EMPTY", "Falling back to linked contact/company phone.");
         }
-
-        if (($entityFields[$phoneMaskFieldId] ?? '') === $maskedPhone) {
-            logEvent("$logPrefix 07 UPDATE SKIPPED", "$entityTitle phone mask field already has target value.");
-            return;
-        }
-
-        $fieldsToUpdate = [
-            $phoneMaskFieldId => $maskedPhone
-        ];
-
-        logEvent("$logPrefix 07 UPDATE PAYLOAD", [
-            'method' => $updateMethod,
-            'entity_id' => $entityId,
-            'fields' => $fieldsToUpdate
-        ]);
-
-        $updateResult = CRest::call($updateMethod, [
-            'id' => $entityId,
-            'fields' => $fieldsToUpdate
-        ]);
-
-        logEvent("$logPrefix 08 UPDATE API RESPONSE", $updateResult);
-        return;
     }
 
     if (empty($rawPhone) && $entityType === 'lead') {
@@ -282,6 +248,154 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
     logEvent("$logPrefix 13 UPDATE API RESPONSE", $updateResult);
 }
 
+function updateLinkedEntityMaskFromContact($entityType, $entityId, $phoneMaskFieldId, $maskedPhone)
+{
+    $entityTitle = strtoupper($entityType);
+    $getMethod = "crm.$entityType.get";
+    $updateMethod = "crm.$entityType.update";
+
+    logEvent("CONTACT STEP LINKED $entityTitle FETCH START", [
+        'method' => $getMethod,
+        'entity_id' => $entityId
+    ]);
+
+    $entityDataFetch = CRest::call($getMethod, ['id' => $entityId]);
+    $entityFields = $entityDataFetch['result'] ?? [];
+
+    logEvent("CONTACT STEP LINKED $entityTitle FETCH RESULT", [
+        'method' => $getMethod,
+        'entity_id' => $entityId,
+        'api_response' => $entityDataFetch
+    ]);
+
+    if (($entityFields[$phoneMaskFieldId] ?? '') === $maskedPhone) {
+        logEvent("CONTACT STEP LINKED $entityTitle UPDATE SKIPPED", [
+            'entity_id' => $entityId,
+            'reason' => 'Phone mask field already has target value.',
+            'target_phone' => $maskedPhone
+        ]);
+        return;
+    }
+
+    $fieldsToUpdate = [
+        $phoneMaskFieldId => $maskedPhone
+    ];
+
+    logEvent("CONTACT STEP LINKED $entityTitle UPDATE PAYLOAD", [
+        'method' => $updateMethod,
+        'entity_id' => $entityId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    $updateResult = CRest::call($updateMethod, [
+        'id' => $entityId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    logEvent("CONTACT STEP LINKED $entityTitle UPDATE RESPONSE", [
+        'entity_id' => $entityId,
+        'api_response' => $updateResult
+    ]);
+}
+
+function processContactPhoneMask($contactId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $eventName)
+{
+    logEvent("CONTACT STEP 01 EVENT RECEIVED", [
+        'event' => $eventName,
+        'contact_id' => $contactId
+    ]);
+
+    if (!$contactId) {
+        logEvent("CONTACT STEP 02 STOPPED", "Contact ID is empty.");
+        return;
+    }
+
+    logEvent("CONTACT STEP 02 CONTACT FETCH START", [
+        'method' => 'crm.contact.get',
+        'contact_id' => $contactId
+    ]);
+
+    $contactDataFetch = CRest::call('crm.contact.get', ['id' => $contactId]);
+    $contactFields = $contactDataFetch['result'] ?? [];
+    $rawPhone = getFirstPhone($contactFields);
+
+    logEvent("CONTACT STEP 03 CONTACT FETCH RESULT", [
+        'contact_id' => $contactId,
+        'api_response' => $contactDataFetch,
+        'phone' => $rawPhone
+    ]);
+
+    $maskedPhone = maskPhone($rawPhone);
+
+    logEvent("CONTACT STEP 04 MASKING CALCULATION", [
+        'contact_id' => $contactId,
+        'original_phone' => $rawPhone,
+        'target_phone' => $maskedPhone
+    ]);
+
+    if (empty($maskedPhone)) {
+        logEvent("CONTACT STEP 05 UPDATE SKIPPED", "Contact phone is empty.");
+        return;
+    }
+
+    logEvent("CONTACT STEP 05 LINKED LEADS FETCH START", [
+        'method' => 'crm.lead.list',
+        'contact_id' => $contactId
+    ]);
+
+    $leadListFetch = CRest::call('crm.lead.list', [
+        'filter' => ['CONTACT_ID' => $contactId],
+        'select' => ['ID', $leadPhoneMaskFieldId]
+    ]);
+    $leads = $leadListFetch['result'] ?? [];
+
+    logEvent("CONTACT STEP 06 LINKED LEADS FETCH RESULT", [
+        'contact_id' => $contactId,
+        'api_response' => $leadListFetch,
+        'count' => count($leads)
+    ]);
+
+    foreach ($leads as $lead) {
+        $leadId = $lead['ID'] ?? null;
+
+        if (!empty($leadId)) {
+            updateLinkedEntityMaskFromContact('lead', $leadId, $leadPhoneMaskFieldId, $maskedPhone);
+        }
+    }
+
+    logEvent("CONTACT STEP 07 LINKED DEALS FETCH START", [
+        'method' => 'crm.deal.list',
+        'contact_id' => $contactId
+    ]);
+
+    $dealListFetch = CRest::call('crm.deal.list', [
+        'filter' => ['CONTACT_ID' => $contactId],
+        'select' => ['ID', $dealPhoneMaskFieldId]
+    ]);
+    $deals = $dealListFetch['result'] ?? [];
+
+    logEvent("CONTACT STEP 08 LINKED DEALS FETCH RESULT", [
+        'contact_id' => $contactId,
+        'api_response' => $dealListFetch,
+        'count' => count($deals)
+    ]);
+
+    foreach ($deals as $deal) {
+        $dealId = $deal['ID'] ?? null;
+
+        if (!empty($dealId)) {
+            updateLinkedEntityMaskFromContact('deal', $dealId, $dealPhoneMaskFieldId, $maskedPhone);
+        }
+    }
+
+    logEvent("CONTACT STEP 09 COMPLETED", [
+        'contact_id' => $contactId,
+        'masked_phone' => $maskedPhone,
+        'lead_count' => count($leads),
+        'deal_count' => count($deals)
+    ]);
+}
+
 $eventName = preg_replace('/[^A-Z]/', '', strtoupper(trim($data['event'] ?? '')));
 $entityId = $data['data']['FIELDS']['ID'] ?? null;
 
@@ -302,6 +416,12 @@ if (strpos($eventName, 'CRMLEAD') !== false) {
         'entity_id' => $entityId
     ]);
     processPhoneMask('deal', $entityId, $dealPhoneFieldId, $dealPhoneMaskFieldId, $eventName);
+} elseif (strpos($eventName, 'CRMCONTACT') !== false) {
+    logEvent("STEP 03 ROUTED TO CONTACT", [
+        'event' => $eventName,
+        'entity_id' => $entityId
+    ]);
+    processContactPhoneMask($entityId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $eventName);
 } elseif (strpos($eventName, 'CRM') !== false) {
     logEvent("CRM EVENT NOT ROUTED", [
         'raw_event' => $data['event'] ?? '',
