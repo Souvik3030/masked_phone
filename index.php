@@ -7,8 +7,8 @@ $dealPhoneFieldId = 'UF_CRM_1777279628958';
 
 $leadPhoneMaskFieldId = 'UF_CRM_1777275227928';
 $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
-$spaEntityTypeId = getenv('SPA_ENTITY_TYPE_ID') ?: 1062;
-$spaPhoneMaskFieldId = 'ufCrm10PhoneMasked';
+$spaEntityTypeId = getenv('SPA_ENTITY_TYPE_ID') ?: 1066;
+$spaPhoneMaskFieldId = 'ufCrm11PhoneMasked';
 
 date_default_timezone_set('Asia/Dubai');
 
