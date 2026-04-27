@@ -67,3 +67,54 @@
     "message": "DEAL STEP 02 STOPPED",
     "data": "Entity ID is empty."
 }
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "CODE VERSION",
+    "data": {
+        "version": "masked-phone-router-2026-04-27-01",
+        "file": "C:\\xampp\\htdocs\\Project\\masked_phone\\index.php"
+    }
+}
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "STEP 01 REQUEST RECEIVED",
+    "data": {
+        "method": "",
+        "event": "ONCRMDEALADD",
+        "entity_id": "",
+        "request_keys": [
+            "event",
+            "data"
+        ]
+    }
+}
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "STEP 02 ROUTER DEBUG",
+    "data": {
+        "normalized_event": "ONCRMDEALADD",
+        "entity_id": ""
+    }
+}
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "STEP 03 ROUTED TO DEAL",
+    "data": {
+        "event": "ONCRMDEALADD",
+        "entity_id": ""
+    }
+}
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "DEAL STEP 01 EVENT RECEIVED",
+    "data": {
+        "event": "ONCRMDEALADD",
+        "entity_type": "DEAL",
+        "entity_id": ""
+    }
+}
+{
+    "timestamp": "2026-04-27 12:52:40",
+    "message": "DEAL STEP 02 STOPPED",
+    "data": "Entity ID is empty."
+}

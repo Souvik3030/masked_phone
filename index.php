@@ -11,6 +11,12 @@ $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
 date_default_timezone_set('Asia/Dubai');
 
 $data = $_REQUEST;
+$codeVersion = 'masked-phone-router-2026-04-27-01';
+
+logEvent("CODE VERSION", [
+    'version' => $codeVersion,
+    'file' => __FILE__
+]);
 
 logEvent("STEP 01 REQUEST RECEIVED", [
     'method' => $_SERVER['REQUEST_METHOD'] ?? '',
@@ -296,6 +302,13 @@ if (strpos($eventName, 'CRMLEAD') !== false) {
         'entity_id' => $entityId
     ]);
     processPhoneMask('deal', $entityId, $dealPhoneFieldId, $dealPhoneMaskFieldId, $eventName);
+} elseif (strpos($eventName, 'CRM') !== false) {
+    logEvent("CRM EVENT NOT ROUTED", [
+        'raw_event' => $data['event'] ?? '',
+        'normalized_event' => $eventName,
+        'entity_id' => $entityId,
+        'version' => $codeVersion
+    ]);
 } else {
     // Optional: Log pings that aren't the correct event
     if (!empty($data)) {
