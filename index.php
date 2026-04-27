@@ -542,6 +542,86 @@ function validateSpaPhoneMasks($spaEntityTypeId, $spaPhoneMaskFieldId, $limit, $
     ]);
 }
 
+function validateCrmPhoneMasks($entityType, $phoneFieldId, $phoneMaskFieldId, $limit, $start)
+{
+    $limit = max(1, min((int)$limit, 50));
+    $start = max(0, (int)$start);
+    $entityTitle = strtoupper($entityType);
+    $listMethod = "crm.$entityType.list";
+
+    logEvent("$entityTitle VALIDATION STEP 01 START", [
+        'method' => $listMethod,
+        'phone_field' => $phoneFieldId,
+        'mask_field' => $phoneMaskFieldId,
+        'limit' => $limit,
+        'start' => $start
+    ]);
+
+    $listFetch = CRest::call($listMethod, [
+        'order' => ['ID' => 'ASC'],
+        'select' => ['ID', $phoneFieldId, $phoneMaskFieldId, 'CONTACT_ID', 'COMPANY_ID', 'PHONE'],
+        'start' => $start
+    ]);
+
+    $items = array_slice($listFetch['result'] ?? [], 0, $limit);
+
+    logEvent("$entityTitle VALIDATION STEP 02 LIST RESULT", [
+        'method' => $listMethod,
+        'api_response' => $listFetch,
+        'received_count' => count($items),
+        'next' => $listFetch['next'] ?? null
+    ]);
+
+    $checked = 0;
+    $processed = 0;
+    $skippedFilled = 0;
+    $skippedNoId = 0;
+
+    foreach ($items as $item) {
+        $checked++;
+        $entityId = $item['ID'] ?? null;
+        $currentMask = $item[$phoneMaskFieldId] ?? '';
+
+        logEvent("$entityTitle VALIDATION STEP 03 ITEM CHECK", [
+            'entity_id' => $entityId,
+            'current_mask' => $currentMask,
+            'phone_field_value' => $item[$phoneFieldId] ?? '',
+            'contact_id' => $item['CONTACT_ID'] ?? null,
+            'company_id' => $item['COMPANY_ID'] ?? null
+        ]);
+
+        if (empty($entityId)) {
+            $skippedNoId++;
+            logEvent("$entityTitle VALIDATION STEP 04 ITEM SKIPPED", "Entity ID is empty.");
+            continue;
+        }
+
+        if (!empty($currentMask)) {
+            $skippedFilled++;
+            logEvent("$entityTitle VALIDATION STEP 04 ITEM SKIPPED", [
+                'entity_id' => $entityId,
+                'reason' => 'Phone mask already filled.'
+            ]);
+            continue;
+        }
+
+        $processed++;
+        logEvent("$entityTitle VALIDATION STEP 05 PROCESSING ITEM", [
+            'entity_id' => $entityId
+        ]);
+
+        processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskFieldId, "{$entityTitle}_VALIDATION_MASK_RUN");
+    }
+
+    logEvent("$entityTitle VALIDATION STEP 06 COMPLETED", [
+        'checked' => $checked,
+        'processed' => $processed,
+        'skipped_filled' => $skippedFilled,
+        'skipped_no_id' => $skippedNoId,
+        'next' => $listFetch['next'] ?? null
+    ]);
+}
+
 function updateLinkedEntityMaskFromContact($entityType, $entityId, $phoneMaskFieldId, $maskedPhone)
 {
     $entityTitle = strtoupper($entityType);
@@ -727,6 +807,9 @@ $manualSpaItemId = $data['spa_item_id'] ?? null;
 $validateSpaRun = ($data['run_spa_mask_validate'] ?? '') === '1';
 $validateSpaLimit = $data['limit'] ?? 50;
 $validateSpaStart = $data['start'] ?? 0;
+$validateLeadRun = ($data['run_lead_mask_validate'] ?? '') === '1';
+$validateDealRun = ($data['run_deal_mask_validate'] ?? '') === '1';
+$validateCrmRun = ($data['run_crm_mask_validate'] ?? '') === '1';
 
 logEvent("STEP 02 ROUTER DEBUG", [
     'normalized_event' => $eventName,
@@ -736,10 +819,32 @@ logEvent("STEP 02 ROUTER DEBUG", [
     'manual_spa_item_id' => $manualSpaItemId,
     'validate_spa_run' => $validateSpaRun,
     'validate_spa_limit' => $validateSpaLimit,
-    'validate_spa_start' => $validateSpaStart
+    'validate_spa_start' => $validateSpaStart,
+    'validate_lead_run' => $validateLeadRun,
+    'validate_deal_run' => $validateDealRun,
+    'validate_crm_run' => $validateCrmRun
 ]);
 
-if ($validateSpaRun) {
+if ($validateCrmRun) {
+    logEvent("STEP 03 ROUTED TO CRM VALIDATION", [
+        'limit' => $validateSpaLimit,
+        'start' => $validateSpaStart
+    ]);
+    validateCrmPhoneMasks('lead', $leadPhoneFieldId, $leadPhoneMaskFieldId, $validateSpaLimit, $validateSpaStart);
+    validateCrmPhoneMasks('deal', $dealPhoneFieldId, $dealPhoneMaskFieldId, $validateSpaLimit, $validateSpaStart);
+} elseif ($validateLeadRun) {
+    logEvent("STEP 03 ROUTED TO LEAD VALIDATION", [
+        'limit' => $validateSpaLimit,
+        'start' => $validateSpaStart
+    ]);
+    validateCrmPhoneMasks('lead', $leadPhoneFieldId, $leadPhoneMaskFieldId, $validateSpaLimit, $validateSpaStart);
+} elseif ($validateDealRun) {
+    logEvent("STEP 03 ROUTED TO DEAL VALIDATION", [
+        'limit' => $validateSpaLimit,
+        'start' => $validateSpaStart
+    ]);
+    validateCrmPhoneMasks('deal', $dealPhoneFieldId, $dealPhoneMaskFieldId, $validateSpaLimit, $validateSpaStart);
+} elseif ($validateSpaRun) {
     logEvent("STEP 03 ROUTED TO SPA VALIDATION", [
         'entityTypeId' => $spaEntityTypeId,
         'limit' => $validateSpaLimit,
