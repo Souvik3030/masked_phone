@@ -117,7 +117,7 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
     logEvent("UPDATE API RESPONSE", $updateResult);
 }
 
-$eventName = $data['event'] ?? '';
+$eventName = strtoupper(trim($data['event'] ?? ''));
 $entityId = $data['data']['FIELDS']['ID'] ?? null;
 
 if ($eventName === 'ONCRMLEADADD' || $eventName === 'ONCRMLEADUPDATE') {
