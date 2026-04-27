@@ -7,8 +7,8 @@ $dealPhoneFieldId = 'UF_CRM_1777279628958';
 
 $leadPhoneMaskFieldId = 'UF_CRM_1777275227928';
 $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
-$spaEntityTypeId = 1058;
-$spaPhoneMaskFieldId = 'ufCrm9PhoneMasked';
+$spaEntityTypeId = getenv('SPA_ENTITY_TYPE_ID') ?: 1062;
+$spaPhoneMaskFieldId = 'ufCrm10PhoneMasked';
 
 date_default_timezone_set('Asia/Dubai');
 
@@ -440,6 +440,108 @@ function processSpaPhoneMask($spaEntityTypeId, $spaItemId, $spaPhoneMaskFieldId,
     logEvent("SPA STEP 10 UPDATE API RESPONSE", $updateResult);
 }
 
+function validateSpaPhoneMasks($spaEntityTypeId, $spaPhoneMaskFieldId, $limit, $start)
+{
+    $limit = max(1, min((int)$limit, 50));
+    $start = max(0, (int)$start);
+
+    logEvent("SPA VALIDATION STEP 01 START", [
+        'entityTypeId' => $spaEntityTypeId,
+        'mask_field' => $spaPhoneMaskFieldId,
+        'limit' => $limit,
+        'start' => $start
+    ]);
+
+    $spaListFetch = CRest::call('crm.item.list', [
+        'entityTypeId' => $spaEntityTypeId,
+        'order' => ['id' => 'ASC'],
+        'select' => ['id', 'title', $spaPhoneMaskFieldId, 'contactId', 'contactIds', 'contacts'],
+        'start' => $start
+    ]);
+
+    $spaItems = array_slice($spaListFetch['result']['items'] ?? [], 0, $limit);
+
+    logEvent("SPA VALIDATION STEP 02 LIST RESULT", [
+        'entityTypeId' => $spaEntityTypeId,
+        'api_response' => $spaListFetch,
+        'received_count' => count($spaItems),
+        'next' => $spaListFetch['next'] ?? null
+    ]);
+
+    $checked = 0;
+    $updated = 0;
+    $skippedFilled = 0;
+    $skippedNoPhone = 0;
+
+    foreach ($spaItems as $spaItem) {
+        $checked++;
+        $spaItemId = $spaItem['id'] ?? null;
+        $currentMask = $spaItem[$spaPhoneMaskFieldId] ?? '';
+
+        logEvent("SPA VALIDATION STEP 03 ITEM CHECK", [
+            'item_id' => $spaItemId,
+            'current_mask' => $currentMask,
+            'contactId' => $spaItem['contactId'] ?? null,
+            'contactIds' => $spaItem['contactIds'] ?? null,
+            'contacts' => $spaItem['contacts'] ?? null
+        ]);
+
+        if (empty($spaItemId)) {
+            continue;
+        }
+
+        if (!empty($currentMask)) {
+            $skippedFilled++;
+            logEvent("SPA VALIDATION STEP 04 ITEM SKIPPED", [
+                'item_id' => $spaItemId,
+                'reason' => 'Phone mask already filled.'
+            ]);
+            continue;
+        }
+
+        $rawPhone = getSpaContactPhone($spaItem, $spaItemId);
+        $maskedPhone = maskPhone($rawPhone);
+
+        logEvent("SPA VALIDATION STEP 05 MASK RESULT", [
+            'item_id' => $spaItemId,
+            'original_phone' => $rawPhone,
+            'target_phone' => $maskedPhone
+        ]);
+
+        if (empty($maskedPhone)) {
+            $skippedNoPhone++;
+            logEvent("SPA VALIDATION STEP 06 ITEM SKIPPED", [
+                'item_id' => $spaItemId,
+                'reason' => 'No contact phone found.'
+            ]);
+            continue;
+        }
+
+        $updateResult = CRest::call('crm.item.update', [
+            'entityTypeId' => $spaEntityTypeId,
+            'id' => $spaItemId,
+            'fields' => [
+                $spaPhoneMaskFieldId => $maskedPhone
+            ]
+        ]);
+
+        $updated++;
+        logEvent("SPA VALIDATION STEP 07 UPDATE RESPONSE", [
+            'item_id' => $spaItemId,
+            'target_phone' => $maskedPhone,
+            'api_response' => $updateResult
+        ]);
+    }
+
+    logEvent("SPA VALIDATION STEP 08 COMPLETED", [
+        'checked' => $checked,
+        'updated' => $updated,
+        'skipped_filled' => $skippedFilled,
+        'skipped_no_phone' => $skippedNoPhone,
+        'next' => $spaListFetch['next'] ?? null
+    ]);
+}
+
 function updateLinkedEntityMaskFromContact($entityType, $entityId, $phoneMaskFieldId, $maskedPhone)
 {
     $entityTitle = strtoupper($entityType);
@@ -622,16 +724,29 @@ $entityId = $data['data']['FIELDS']['ID'] ?? null;
 $requestEntityTypeId = $data['data']['FIELDS']['ENTITY_TYPE_ID'] ?? $data['data']['FIELDS']['entityTypeId'] ?? $data['entityTypeId'] ?? null;
 $manualSpaRun = ($data['run_spa_mask'] ?? '') === '1';
 $manualSpaItemId = $data['spa_item_id'] ?? null;
+$validateSpaRun = ($data['run_spa_mask_validate'] ?? '') === '1';
+$validateSpaLimit = $data['limit'] ?? 50;
+$validateSpaStart = $data['start'] ?? 0;
 
 logEvent("STEP 02 ROUTER DEBUG", [
     'normalized_event' => $eventName,
     'entity_id' => $entityId,
     'entityTypeId' => $requestEntityTypeId,
     'manual_spa_run' => $manualSpaRun,
-    'manual_spa_item_id' => $manualSpaItemId
+    'manual_spa_item_id' => $manualSpaItemId,
+    'validate_spa_run' => $validateSpaRun,
+    'validate_spa_limit' => $validateSpaLimit,
+    'validate_spa_start' => $validateSpaStart
 ]);
 
-if ($manualSpaRun && !empty($manualSpaItemId)) {
+if ($validateSpaRun) {
+    logEvent("STEP 03 ROUTED TO SPA VALIDATION", [
+        'entityTypeId' => $spaEntityTypeId,
+        'limit' => $validateSpaLimit,
+        'start' => $validateSpaStart
+    ]);
+    validateSpaPhoneMasks($spaEntityTypeId, $spaPhoneMaskFieldId, $validateSpaLimit, $validateSpaStart);
+} elseif ($manualSpaRun && !empty($manualSpaItemId)) {
     logEvent("STEP 03 ROUTED TO MANUAL SPA", [
         'spa_item_id' => $manualSpaItemId,
         'entityTypeId' => $spaEntityTypeId
