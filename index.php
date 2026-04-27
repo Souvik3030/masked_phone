@@ -4,8 +4,11 @@ require_once(__DIR__ . '/utils.php'); // <-- Ensure this is linked
 
 $leadEmailFieldId = 'UF_CRM_1768897839376';
 $leadPhoneFieldId = 'UF_CRM_1768897823888';
+$leadPhoneMaskFieldId = 'UF_CRM_1777275227928';
 
 date_default_timezone_set('Asia/Dubai');
+
+logEvent("TEST NAME", "test name");
 
 $data = $_POST;
 
@@ -102,6 +105,7 @@ if (isset($data['event']) && $data['event'] === 'ONCRMLEADADD') {
         }
         if (!empty($maskedPhone)) {
             $fieldsToUpdate[$leadPhoneFieldId] = $maskedPhone;
+            $fieldsToUpdate[$leadPhoneMaskFieldId] = $maskedPhone;
         }
 
         if (!empty($fieldsToUpdate)) {

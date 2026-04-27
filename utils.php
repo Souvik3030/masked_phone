@@ -14,10 +14,11 @@ function formatDate($dateString)
 function logEvent($message, $data = [])
 {
     $baseLogDir = __DIR__ . '/logs';
-    $year = date('Y');
-    $month = date('m');
-    $day = date('d');
-    $dirPath = "$baseLogDir/$year/$month/$day";
+    // $year = date('Y');
+    // $month = date('m');
+    // $day = date('d');
+    // $dirPath = "$baseLogDir/$year/$month/$day";
+    $dirPath = "$baseLogDir";
 
     if (!is_dir($dirPath)) {
         mkdir($dirPath, 0777, true);
