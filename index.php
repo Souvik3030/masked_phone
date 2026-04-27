@@ -7,6 +7,8 @@ $dealPhoneFieldId = 'UF_CRM_1777279628958';
 
 $leadPhoneMaskFieldId = 'UF_CRM_1777275227928';
 $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
+$spaEntityTypeId = 1058;
+$spaPhoneMaskFieldId = 'ufCrm9PhoneMasked';
 
 date_default_timezone_set('Asia/Dubai');
 
@@ -110,6 +112,73 @@ function maskPhone($rawPhone)
     }
 
     return str_repeat("x", $len);
+}
+
+function getSpaContactIds($itemFields)
+{
+    $contactIds = [];
+
+    if (!empty($itemFields['contactId'])) {
+        $contactIds[] = $itemFields['contactId'];
+    }
+
+    if (!empty($itemFields['contactIds']) && is_array($itemFields['contactIds'])) {
+        foreach ($itemFields['contactIds'] as $contactId) {
+            if (!empty($contactId)) {
+                $contactIds[] = $contactId;
+            }
+        }
+    }
+
+    if (!empty($itemFields['contacts']) && is_array($itemFields['contacts'])) {
+        foreach ($itemFields['contacts'] as $contact) {
+            if (is_array($contact)) {
+                $contactId = $contact['id'] ?? $contact['ID'] ?? $contact['contactId'] ?? null;
+            } else {
+                $contactId = $contact;
+            }
+
+            if (!empty($contactId)) {
+                $contactIds[] = $contactId;
+            }
+        }
+    }
+
+    return array_values(array_unique($contactIds));
+}
+
+function getSpaContactPhone($itemFields, $spaItemId)
+{
+    $contactIds = getSpaContactIds($itemFields);
+
+    logEvent("SPA STEP 05 CONTACT IDS RESULT", [
+        'spa_item_id' => $spaItemId,
+        'contact_ids' => $contactIds
+    ]);
+
+    foreach ($contactIds as $contactId) {
+        logEvent("SPA STEP 06 CONTACT PHONE CHECK", [
+            'spa_item_id' => $spaItemId,
+            'contact_id' => $contactId
+        ]);
+
+        $phone = getContactPhone($contactId);
+
+        if (!empty($phone)) {
+            logEvent("SPA STEP 07 CONTACT PHONE FOUND", [
+                'spa_item_id' => $spaItemId,
+                'contact_id' => $contactId,
+                'phone' => $phone
+            ]);
+            return $phone;
+        }
+    }
+
+    logEvent("SPA STEP 07 CONTACT PHONE NOT FOUND", [
+        'spa_item_id' => $spaItemId
+    ]);
+
+    return '';
 }
 
 function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskFieldId, $eventName)
@@ -248,6 +317,129 @@ function processPhoneMask($entityType, $entityId, $phoneFieldId, $phoneMaskField
     logEvent("$logPrefix 13 UPDATE API RESPONSE", $updateResult);
 }
 
+function updateSpaItemMask($spaEntityTypeId, $spaItemId, $spaPhoneMaskFieldId, $maskedPhone)
+{
+    logEvent("CONTACT STEP LINKED SPA FETCH START", [
+        'method' => 'crm.item.get',
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId
+    ]);
+
+    $spaItemFetch = CRest::call('crm.item.get', [
+        'entityTypeId' => $spaEntityTypeId,
+        'id' => $spaItemId
+    ]);
+    $spaItem = $spaItemFetch['result']['item'] ?? [];
+
+    logEvent("CONTACT STEP LINKED SPA FETCH RESULT", [
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId,
+        'api_response' => $spaItemFetch
+    ]);
+
+    if (($spaItem[$spaPhoneMaskFieldId] ?? '') === $maskedPhone) {
+        logEvent("CONTACT STEP LINKED SPA UPDATE SKIPPED", [
+            'item_id' => $spaItemId,
+            'reason' => 'SPA phone mask field already has target value.',
+            'target_phone' => $maskedPhone
+        ]);
+        return;
+    }
+
+    $fieldsToUpdate = [
+        $spaPhoneMaskFieldId => $maskedPhone
+    ];
+
+    logEvent("CONTACT STEP LINKED SPA UPDATE PAYLOAD", [
+        'method' => 'crm.item.update',
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    $updateResult = CRest::call('crm.item.update', [
+        'entityTypeId' => $spaEntityTypeId,
+        'id' => $spaItemId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    logEvent("CONTACT STEP LINKED SPA UPDATE RESPONSE", [
+        'item_id' => $spaItemId,
+        'api_response' => $updateResult
+    ]);
+}
+
+function processSpaPhoneMask($spaEntityTypeId, $spaItemId, $spaPhoneMaskFieldId, $eventName)
+{
+    logEvent("SPA STEP 01 EVENT RECEIVED", [
+        'event' => $eventName,
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId
+    ]);
+
+    if (!$spaItemId) {
+        logEvent("SPA STEP 02 STOPPED", "SPA item ID is empty.");
+        return;
+    }
+
+    logEvent("SPA STEP 02 ITEM FETCH START", [
+        'method' => 'crm.item.get',
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId
+    ]);
+
+    $spaItemFetch = CRest::call('crm.item.get', [
+        'entityTypeId' => $spaEntityTypeId,
+        'id' => $spaItemId
+    ]);
+    $spaItem = $spaItemFetch['result']['item'] ?? [];
+
+    logEvent("SPA STEP 03 ITEM FETCH RESULT", [
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId,
+        'api_response' => $spaItemFetch
+    ]);
+
+    $rawPhone = getSpaContactPhone($spaItem, $spaItemId);
+    $maskedPhone = maskPhone($rawPhone);
+
+    logEvent("SPA STEP 08 MASKING CALCULATION", [
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId,
+        'original_phone' => $rawPhone,
+        'target_phone' => $maskedPhone
+    ]);
+
+    if (empty($maskedPhone)) {
+        logEvent("SPA STEP 09 UPDATE SKIPPED", "No contact phone found for SPA item.");
+        return;
+    }
+
+    if (($spaItem[$spaPhoneMaskFieldId] ?? '') === $maskedPhone) {
+        logEvent("SPA STEP 09 UPDATE SKIPPED", "SPA phone mask field already has target value.");
+        return;
+    }
+
+    $fieldsToUpdate = [
+        $spaPhoneMaskFieldId => $maskedPhone
+    ];
+
+    logEvent("SPA STEP 09 UPDATE PAYLOAD", [
+        'method' => 'crm.item.update',
+        'entityTypeId' => $spaEntityTypeId,
+        'item_id' => $spaItemId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    $updateResult = CRest::call('crm.item.update', [
+        'entityTypeId' => $spaEntityTypeId,
+        'id' => $spaItemId,
+        'fields' => $fieldsToUpdate
+    ]);
+
+    logEvent("SPA STEP 10 UPDATE API RESPONSE", $updateResult);
+}
+
 function updateLinkedEntityMaskFromContact($entityType, $entityId, $phoneMaskFieldId, $maskedPhone)
 {
     $entityTitle = strtoupper($entityType);
@@ -298,7 +490,7 @@ function updateLinkedEntityMaskFromContact($entityType, $entityId, $phoneMaskFie
     ]);
 }
 
-function processContactPhoneMask($contactId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $eventName)
+function processContactPhoneMask($contactId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $spaEntityTypeId, $spaPhoneMaskFieldId, $eventName)
 {
     logEvent("CONTACT STEP 01 EVENT RECEIVED", [
         'event' => $eventName,
@@ -388,20 +580,51 @@ function processContactPhoneMask($contactId, $leadPhoneMaskFieldId, $dealPhoneMa
         }
     }
 
+    logEvent("CONTACT STEP 09 LINKED SPA FETCH START", [
+        'method' => 'crm.item.list',
+        'entityTypeId' => $spaEntityTypeId,
+        'contact_id' => $contactId
+    ]);
+
+    $spaListFetch = CRest::call('crm.item.list', [
+        'entityTypeId' => $spaEntityTypeId,
+        'filter' => ['contactId' => $contactId],
+        'select' => ['id', $spaPhoneMaskFieldId, 'contactId', 'contactIds', 'contacts']
+    ]);
+    $spaItems = $spaListFetch['result']['items'] ?? [];
+
+    logEvent("CONTACT STEP 10 LINKED SPA FETCH RESULT", [
+        'contact_id' => $contactId,
+        'entityTypeId' => $spaEntityTypeId,
+        'api_response' => $spaListFetch,
+        'count' => count($spaItems)
+    ]);
+
+    foreach ($spaItems as $spaItem) {
+        $spaItemId = $spaItem['id'] ?? null;
+
+        if (!empty($spaItemId)) {
+            updateSpaItemMask($spaEntityTypeId, $spaItemId, $spaPhoneMaskFieldId, $maskedPhone);
+        }
+    }
+
     logEvent("CONTACT STEP 09 COMPLETED", [
         'contact_id' => $contactId,
         'masked_phone' => $maskedPhone,
         'lead_count' => count($leads),
-        'deal_count' => count($deals)
+        'deal_count' => count($deals),
+        'spa_count' => count($spaItems)
     ]);
 }
 
 $eventName = preg_replace('/[^A-Z]/', '', strtoupper(trim($data['event'] ?? '')));
 $entityId = $data['data']['FIELDS']['ID'] ?? null;
+$requestEntityTypeId = $data['data']['FIELDS']['ENTITY_TYPE_ID'] ?? $data['data']['FIELDS']['entityTypeId'] ?? $data['entityTypeId'] ?? null;
 
 logEvent("STEP 02 ROUTER DEBUG", [
     'normalized_event' => $eventName,
-    'entity_id' => $entityId
+    'entity_id' => $entityId,
+    'entityTypeId' => $requestEntityTypeId
 ]);
 
 if (strpos($eventName, 'CRMLEAD') !== false) {
@@ -421,7 +644,14 @@ if (strpos($eventName, 'CRMLEAD') !== false) {
         'event' => $eventName,
         'entity_id' => $entityId
     ]);
-    processContactPhoneMask($entityId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $eventName);
+    processContactPhoneMask($entityId, $leadPhoneMaskFieldId, $dealPhoneMaskFieldId, $spaEntityTypeId, $spaPhoneMaskFieldId, $eventName);
+} elseif (strpos($eventName, 'CRMDYNAMIC') !== false || strpos($eventName, 'CRMITEM') !== false || (string)$requestEntityTypeId === (string)$spaEntityTypeId) {
+    logEvent("STEP 03 ROUTED TO SPA", [
+        'event' => $eventName,
+        'entity_id' => $entityId,
+        'entityTypeId' => $requestEntityTypeId ?: $spaEntityTypeId
+    ]);
+    processSpaPhoneMask($spaEntityTypeId, $entityId, $spaPhoneMaskFieldId, $eventName);
 } elseif (strpos($eventName, 'CRM') !== false) {
     logEvent("CRM EVENT NOT ROUTED", [
         'raw_event' => $data['event'] ?? '',
