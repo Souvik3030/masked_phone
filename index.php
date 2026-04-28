@@ -2,13 +2,19 @@
 require_once(__DIR__ . '/crest/crest.php');
 require_once(__DIR__ . '/utils.php'); // <-- Ensure this is linked
 
-$leadPhoneFieldId = 'UF_CRM_1768897823888';
-$dealPhoneFieldId = 'UF_CRM_1777279628958';
+// test portal
+// $leadPhoneFieldId = 'UF_CRM_1768897823888';
+// $dealPhoneFieldId = 'UF_CRM_1777279628958';
 
-$leadPhoneMaskFieldId = 'UF_CRM_1777275227928';
-$dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
-$spaEntityTypeId = getenv('SPA_ENTITY_TYPE_ID') ?: 1066;
-$spaPhoneMaskFieldId = 'ufCrm11PhoneMasked';
+// $dealPhoneMaskFieldId = 'UF_CRM_1777278234424';
+// $spaEntityTypeId = getenv('SPA_ENTITY_TYPE_ID') ?: 1066;
+// $spaPhoneMaskFieldId = 'ufCrm11PhoneMasked';
+// $leadPhoneMaskFieldId = 'UF_CRM_1777275227928'; // <- test
+
+// Empire portal
+// lead 
+$leadPhoneMaskFieldId = 'UF_CRM_1777354743083';
+
 
 date_default_timezone_set('Asia/Dubai');
 
