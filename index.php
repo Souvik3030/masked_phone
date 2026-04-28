@@ -109,15 +109,17 @@ function maskPhone($rawPhone)
         return '';
     }
 
+    $hasPlusPrefix = preg_match('/^\s*\+/', $rawPhone) === 1;
     $cleanPhone = preg_replace('/[^0-9]/', '', $rawPhone);
     $len = strlen($cleanPhone);
+    $prefix = $hasPlusPrefix ? '+' : '';
 
     if ($len > 4) {
         $visiblePart = substr($cleanPhone, 0, -4);
-        return $visiblePart . "xxxx";
+        return $prefix . $visiblePart . "xxxx";
     }
 
-    return str_repeat("x", $len);
+    return $prefix . str_repeat("x", $len);
 }
 
 function getSpaContactIds($itemFields)
